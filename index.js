@@ -1,5 +1,5 @@
 /**
- * RiverPhone v0.1.2
+ * RiverPhone v0.1.3
  * Standalone SillyTavern extension by River × Sylvie.
  * Host-page implementation: no Tavern Helper iframe is required.
  */
@@ -293,6 +293,15 @@ function applySettings() {
   if (root) root.style.display = enabled ? '' : 'none';
   if (fab) fab.style.setProperty('display', enabled ? 'grid' : 'none', 'important');
 }
+function openPhone() {
+  const p = document.getElementById('rp-phone-panel');
+  if (!p) return;
+  ui.open = true;
+  p.classList.add('open');
+  p.setAttribute('aria-hidden','false');
+  renderPhone();
+}
+
 function closePhone() {
   ui.open = false;
   const p = document.getElementById('rp-phone-panel');
@@ -425,6 +434,27 @@ function scanExisting() {
   (ctx().chat||[]).forEach((m,i)=>{ if(!m?.is_user){const p=parsePayload(m.mes);if(p?.status)renderInlineStatus(i,p);} });
   const chat=ctx().chat||[]; for(let i=chat.length-1;i>=0;i--){if(!chat[i]?.is_user){const p=parsePayload(chat[i].mes);if(p){applyPayload(p,null);break;}}}
 }
+function addExtensionMenuLauncher() {
+  const menu = document.getElementById('extensionsMenu');
+  if (!menu || document.getElementById('rp-extension-menu-launch')) return;
+  const item = document.createElement('div');
+  item.id = 'rp-extension-menu-launch';
+  item.className = 'list-group-item flex-container flexGap5 interactable';
+  item.setAttribute('tabindex','0');
+  item.setAttribute('title','打开 RiverPhone');
+  item.innerHTML = '<div class="fa-solid fa-mobile-screen-button extensionsMenuExtensionButton"></div><span>RiverPhone</span>';
+  item.addEventListener('click', openPhone);
+  item.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openPhone();
+    }
+  });
+  menu.appendChild(item);
+  const button = document.getElementById('extensionsMenuButton');
+  if (button?.style) button.style.display = 'flex';
+}
+
 function subscribe() {
   const c=ctx(), e=c.event_types||c.eventTypes||{}; if(!c.eventSource?.on)return;
   c.eventSource.on(e.CHARACTER_MESSAGE_RENDERED||'character_message_rendered',id=>processMessage(id));
@@ -438,9 +468,10 @@ function subscribe() {
 function mountSettings() {
   const host=document.querySelector('#extensions_settings,#extensions_settings2'); if(!host||document.getElementById('rp-settings'))return;
   const box=document.createElement('div');box.id='rp-settings';box.className='extension_container';
-  box.innerHTML='<div class="inline-drawer"><div class="inline-drawer-toggle inline-drawer-header"><b>RiverPhone</b><div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div></div><div class="inline-drawer-content"><label class="checkbox_label"><input id="rp-enabled" type="checkbox"><span>启用悬浮小手机</span></label><p class="notes">扩展直接运行在 SillyTavern 主页面，不依赖角色脚本 iframe。</p></div></div>';
+  box.innerHTML='<div class="inline-drawer"><div class="inline-drawer-toggle inline-drawer-header"><b>RiverPhone</b><div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div></div><div class="inline-drawer-content"><div class="flex-container flexGap5" style="margin:6px 0"><div id="rp-open-now" class="menu_button menu_button_icon interactable" tabindex="0"><i class="fa-solid fa-mobile-screen-button"></i><span>打开 RiverPhone</span></div></div><label class="checkbox_label"><input id="rp-enabled" type="checkbox"><span>启用悬浮小手机</span></label><p class="notes">扩展直接运行在 SillyTavern 主页面，不依赖角色脚本 iframe。</p></div></div>';
   host.append(box);const input=box.querySelector('#rp-enabled');input.checked=settings().enabled!==false;
   input.addEventListener('change',()=>{settings().enabled=input.checked;saveSettings();applySettings();});
+  box.querySelector('#rp-open-now')?.addEventListener('click',openPhone);
 }
 
 async function activate() {
@@ -451,10 +482,16 @@ async function activate() {
     s.launcherRecoveryV011 = true;
     saveSettings();
   }
-  initUi();subscribe();await installContract();await updateActivityPrompt();setTimeout(scanExisting,180);
+  initUi();
+  addExtensionMenuLauncher();
+  subscribe();
+  await installContract();
+  await updateActivityPrompt();
+  setTimeout(scanExisting,180);
   setInterval(() => {
     if (!document.getElementById('rp-phone-fab')) ensureLauncher();
+    if (!document.getElementById('rp-extension-menu-launch')) addExtensionMenuLauncher();
   }, 1500);
-  console.info('[RiverPhone] v0.1.2 activated on host page');
+  console.info('[RiverPhone] v0.1.3 activated on host page');
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',activate,{once:true});else queueMicrotask(activate);

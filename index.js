@@ -1,5 +1,5 @@
 /**
- * RiverPhone v0.1.0
+ * RiverPhone v0.1.1
  * Standalone SillyTavern extension by River × Sylvie.
  * Host-page implementation: no Tavern Helper iframe is required.
  */
@@ -218,43 +218,75 @@ async function installContract() {
 }
 
 function shell() {
-  return '<button id="rp-phone-fab" type="button" aria-label="打开 RiverPhone">' + ICON + '<span id="rp-fab-badge"></span></button>' +
-  '<section id="rp-phone-panel" aria-hidden="true"><div class="rp-shell"><div class="rp-screen">' +
+  return '<section id="rp-phone-panel" aria-hidden="true"><div class="rp-shell"><div class="rp-screen">' +
   '<header class="rp-top"><span id="rp-os-time">23:58</span><span class="rp-word">RIVERPHONE</span><span id="rp-os-battery">67%</span></header>' +
   '<main id="rp-phone-body" class="rp-body"></main>' +
   '<nav class="rp-nav"><button type="button" data-rp-action="back">返回</button><button type="button" data-rp-action="home">主页</button><button type="button" data-rp-action="close">关闭</button></nav>' +
   '</div></div></section>';
 }
 
+function bindLauncher(fab) {
+  if (!fab || fab.dataset.rpBound === '1') return;
+  fab.dataset.rpBound = '1';
+  const toggle = e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const panel = document.getElementById('rp-phone-panel');
+    if (!panel) return;
+    ui.open = !ui.open;
+    panel.classList.toggle('open', ui.open);
+    panel.setAttribute('aria-hidden', String(!ui.open));
+    if (ui.open) renderPhone();
+  };
+  fab.addEventListener('click', toggle, { passive: false });
+  fab.addEventListener('touchend', toggle, { passive: false });
+}
+
+function ensureLauncher() {
+  let fab = document.getElementById('rp-phone-fab');
+  if (!fab) {
+    fab = document.createElement('button');
+    fab.id = 'rp-phone-fab';
+    fab.type = 'button';
+    fab.setAttribute('aria-label', '打开 RiverPhone');
+    fab.innerHTML = ICON + '<span id="rp-fab-badge"></span>';
+    fab.dataset.owner = 'riverphone-extension';
+    document.body.append(fab);
+  }
+  bindLauncher(fab);
+  fab.style.setProperty('display', settings().enabled === false ? 'none' : 'grid', 'important');
+  fab.style.setProperty('visibility', 'visible', 'important');
+  fab.style.setProperty('opacity', '1', 'important');
+  return fab;
+}
+
 function initUi() {
   document.getElementById('rp-root')?.remove();
+  document.getElementById('rp-phone-fab')?.remove();
   document.getElementById('rp-settings')?.remove();
+
   const root = document.createElement('div');
   root.id = 'rp-root';
   root.dataset.owner = 'riverphone-extension';
   root.innerHTML = shell();
   document.body.append(root);
 
-  const fab = root.querySelector('#rp-phone-fab');
+  ensureLauncher();
   const panel = root.querySelector('#rp-phone-panel');
-
-  fab.addEventListener('click', e => {
-    e.preventDefault(); e.stopPropagation();
-    ui.open = !ui.open;
-    panel.classList.toggle('open', ui.open);
-    panel.setAttribute('aria-hidden', String(!ui.open));
-    if (ui.open) renderPhone();
-  });
   panel.addEventListener('click', handleClick);
   panel.addEventListener('submit', handleSubmit);
+
   mountSettings();
   applySettings();
   renderPhone();
 }
 
 function applySettings() {
+  const enabled = settings().enabled !== false;
   const root = document.getElementById('rp-root');
-  if (root) root.style.display = settings().enabled === false ? 'none' : '';
+  const fab = document.getElementById('rp-phone-fab');
+  if (root) root.style.display = enabled ? '' : 'none';
+  if (fab) fab.style.setProperty('display', enabled ? 'grid' : 'none', 'important');
 }
 function closePhone() {
   ui.open = false;
@@ -408,7 +440,16 @@ function mountSettings() {
 
 async function activate() {
   if(ui.initialized)return;ui.initialized=true;
+  const s = settings();
+  if (!s.launcherRecoveryV011) {
+    s.enabled = true;
+    s.launcherRecoveryV011 = true;
+    saveSettings();
+  }
   initUi();subscribe();await installContract();await updateActivityPrompt();setTimeout(scanExisting,180);
-  console.info('[RiverPhone] v0.1.0 activated on host page');
+  setInterval(() => {
+    if (!document.getElementById('rp-phone-fab')) ensureLauncher();
+  }, 1500);
+  console.info('[RiverPhone] v0.1.1 activated on host page');
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',activate,{once:true});else queueMicrotask(activate);

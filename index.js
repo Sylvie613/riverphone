@@ -1,5 +1,5 @@
 /**
- * RiverPhone v0.1.1
+ * RiverPhone v0.1.2
  * Standalone SillyTavern extension by River × Sylvie.
  * Host-page implementation: no Tavern Helper iframe is required.
  */
@@ -228,18 +228,23 @@ function shell() {
 function bindLauncher(fab) {
   if (!fab || fab.dataset.rpBound === '1') return;
   fab.dataset.rpBound = '1';
+
   const toggle = e => {
     e.preventDefault();
     e.stopPropagation();
     const panel = document.getElementById('rp-phone-panel');
     if (!panel) return;
-    ui.open = !ui.open;
+    ui.open = !panel.classList.contains('open');
     panel.classList.toggle('open', ui.open);
     panel.setAttribute('aria-hidden', String(!ui.open));
     if (ui.open) renderPhone();
   };
-  fab.addEventListener('click', toggle, { passive: false });
-  fab.addEventListener('touchend', toggle, { passive: false });
+
+  if ('PointerEvent' in window) {
+    fab.addEventListener('pointerup', toggle, { passive: false });
+  } else {
+    fab.addEventListener('click', toggle, { passive: false });
+  }
 }
 
 function ensureLauncher() {
@@ -450,6 +455,6 @@ async function activate() {
   setInterval(() => {
     if (!document.getElementById('rp-phone-fab')) ensureLauncher();
   }, 1500);
-  console.info('[RiverPhone] v0.1.1 activated on host page');
+  console.info('[RiverPhone] v0.1.2 activated on host page');
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',activate,{once:true});else queueMicrotask(activate);

@@ -1,5 +1,5 @@
 /**
- * RiverPhone v0.4.0
+ * RiverPhone v0.5.0
  * Standalone SillyTavern extension by River × Sylvie.
  * Host-page implementation: no Tavern Helper iframe is required.
  */
@@ -38,6 +38,41 @@ const STARTER_NOTE = {
   title: '去排练前',
   time: '22:06',
   text: '谱夹放进包里。\n下楼顺路买一套弦。\n钥匙别又落在排练室。',
+};
+
+const SOCIAL_SCHEDULE = {
+  forum: { first: 1, interval: 3 },
+  moments: { first: 2, interval: 4 },
+};
+
+const CAMPUS_FALLBACKS = {
+  forum: [
+    { board: '校园日常', title: '二食堂的番茄面是不是换窗口了', author: '端碗找座位',
+      text: '转了一圈只看到馄饨。昨天还在，我是不是来晚了？',
+      replies: [{ author: '二楼靠窗', text: '挪到最里面啦。我刚吃完，别在馄饨那条队里等。' }] },
+    { board: '选修课', title: '想蹭一节电影鉴赏，有座位吗', author: '周四不排课',
+      text: '没抢到课，主要想看老师说的那部老片。后排能坐吗？',
+      replies: [{ author: '下课先别走', text: '后门那排常空着。片子中间有一次讨论，早点进去就行。' }] },
+    { board: '失物招领', title: '操场看台有一本没写名字的速写本', author: '绕操场第三圈',
+      text: '封面夹了张公交票，怕下雨就先拿到体育馆值班台了。' },
+    { board: '校园日常', title: '图书馆那台咖啡机今天只吐纸杯', author: '先把早八上完',
+      text: '杯子挺好，咖啡没见着。',
+      replies: [{ author: '南门便利店常客', text: '我上午也是。拍一下订单号，找一楼值班老师能退。' }] },
+    { board: '活动', title: '旧书摊想收几本画册，有人出吗', author: '帆布袋装不下',
+      text: '边角磨损没关系，主要想拿来翻版式。可以拿多余的空白本交换。' },
+    { board: '校园日常', title: '谁给琴房门口那盆薄荷换了牌子', author: '隔壁练琴的',
+      text: '原来写每周浇一次，现在写「真的，拜托了」。',
+      replies: [{ author: '知道但不说', text: '这已经是它这个月第三张求生告示。' }] },
+  ],
+  moments: [
+    { author: '林棠', text: '版式作业终于交了。电脑还开着，人在食堂，已经把自己的名字忘了。' },
+    { author: '周芮', text: '今天的桂花冰豆花是真好吃。唯一的问题是，我以为打包一份能撑到宿舍。',
+      comments: [{ author: '陈禾', text: '所以你在电梯里吃完的那盒到底是谁的。' }] },
+    { author: '谭荔', text: '在旧书摊买了本书，翻出来上一任主人夹的购物清单。第三行写的居然是「别再买书」。' },
+    { author: '程也', text: '在操场碰到一只跟跑的狗。它跑完一圈就走，我现在很羡慕这种说走就走的体力。' },
+    { author: '许望舒', text: '琴房的窗帘坏了，下午四点光刚好斜进来。以后修好了我可能还会想念今天。' },
+    { author: '陈禾', text: '室友说给我带晚饭，发来的照片里只有一根烤肠。她说剩下的在路上出了点意外。' },
+  ],
 };
 
 const DEFAULT_STATE = {
@@ -196,39 +231,61 @@ function normalizeArray(v) {
   return String(v).split(/[；;|]/).map(x=>x.trim()).filter(Boolean);
 }
 
-function* storyEvents(key) {
+function* storyTurns() {
+  let turn = 0;
+  let awaitingReply = false;
   for (const message of ctx().chat || []) {
-    if (!message || typeof message !== 'object' || message.is_user || message.is_system) continue;
+    if (!message || typeof message !== 'object' || message.is_system) continue;
+    if (message.is_user) {
+      awaitingReply = true;
+      continue;
+    }
     let cached = parsedStory.get(message);
     if (!cached || cached.text !== message.mes) {
-      cached = { text: message.mes, events: parsePayload(message.mes)?.events };
+      const payload = parsePayload(message.mes);
+      cached = { text: message.mes, events: payload?.events, time: payload?.phone?.phone_time || payload?.status?.time };
       parsedStory.set(message, cached);
     }
-    const events = cached.events?.[key];
-    if (!Array.isArray(events)) continue;
-    for (const event of events) {
-      if (event && typeof event === 'object') yield event;
-    }
+    yield { ...cached, turn: awaitingReply ? ++turn : null };
+    awaitingReply = false;
   }
+}
+
+function* storyEvents(key) {
+  for (const { events } of storyTurns()) {
+    const entries = events?.[key];
+    if (!Array.isArray(entries)) continue;
+    for (const entry of entries) if (entry && typeof entry === 'object') yield entry;
+  }
+}
+
+function socialSlot(key, turn, start) {
+  if (turn === null || !Number.isInteger(start)) return null;
+  const { first, interval } = SOCIAL_SCHEDULE[key];
+  const offset = turn - start - first;
+  return offset >= 0 && offset % interval === 0 ? offset / interval : null;
 }
 
 function discussionPosts(key) {
   const isForum = key === 'forum';
   const starter = isForum ? FORUM_STARTER_POST : MOMENTS_STARTER_POST;
   const threads = new Map([[starter.id, structuredClone(starter)]]);
-  for (const event of storyEvents(key)) {
+  const addPost = event => {
+    if (!event || typeof event !== 'object') return false;
     const title = compact(event.title, 100);
     const id = compact(event.id, 100) || (isForum ? title : '');
-    if (!id) continue;
+    if (!id) return false;
     let thread = threads.get(id);
+    let changed = !thread;
     if (!thread) {
       const text = typeof event.text === 'string' ? event.text.trim() : '';
-      if (!text || (isForum && !title)) continue;
+      if (!text || (isForum && !title)) return false;
       thread = {
         id, title, text,
         board: compact(event.board, 24) || '校园日常',
         author: compact(event.author, 32) || '匿名同学',
         time: compact(event.time, 32),
+        hot: event.hot === true,
         replies: [],
       };
     }
@@ -240,9 +297,25 @@ function discussionPosts(key) {
       const time = compact(reply.time, 32);
       if (thread.replies.some(r => r.author === author && r.text === text && r.time === time)) continue;
       thread.replies.push({ author, text, time });
+      changed = true;
     }
-    if (isForum) threads.delete(id);
+    if (event.hot === true) thread.hot = true;
+    if (isForum && changed) threads.delete(id);
     threads.set(id, thread);
+    return changed;
+  };
+  const start = ctx().chatMetadata?.[MODULE_KEY]?.socialStartTurn;
+  for (const { events, turn, time } of storyTurns()) {
+    let changed = false;
+    const entries = events?.[key];
+    for (const entry of Array.isArray(entries) ? entries : []) {
+      if (addPost(entry)) changed = true;
+    }
+    const slot = socialSlot(key, turn, start);
+    if (changed || slot === null) continue;
+    const templates = CAMPUS_FALLBACKS[key];
+    const fallback = templates[slot % templates.length];
+    addPost({ ...fallback, id: 'campus-' + key + '-' + slot, time, hot: isForum && slot % 2 === 0 });
   }
   return [...threads.values()].reverse();
 }
@@ -359,9 +432,22 @@ async function applyPayload(payload, messageId = null, messages = []) {
   renderPhone();
 }
 
-function buildActivityPrompt() {
+function buildActivityPrompt(generationType) {
   if (!isYuSishiChat()) return '';
   const s = state();
+  let completed = 0;
+  for (const { turn } of storyTurns()) if (turn !== null) completed = turn;
+  if (!Number.isInteger(s.socialStartTurn) || s.socialStartTurn > completed) s.socialStartTurn = completed;
+  const replacing = ['regenerate', 'swipe', 'continue'].includes(generationType) && !ctx().chat?.at(-1)?.is_user;
+  const nextTurn = completed + (replacing ? 0 : 1);
+  const socialTasks = [];
+  for (const key of ['forum', 'moments']) {
+    const slot = socialSlot(key, nextTurn, s.socialStartTurn);
+    if (slot === null) continue;
+    const subject = slot % 2 === 0 ? '和近期公开发生的剧情有关；没有合适话题时写校园日常' : '写与主线无关的普通校园生活';
+    const update = key === 'forum' ? '一条新帖或有进展的旧帖回帖' : '一条新动态或有进展的评论';
+    socialTasks.push('本轮必须在 events.' + key + ' 记录' + update + '，' + subject + '。本轮用户主动发布也算更新。');
+  }
   const recent = (s.activities || []).slice(-8).join('\n');
   const previous = {
     time: s.status.time,
@@ -390,12 +476,13 @@ function buildActivityPrompt() {
     (recent ? '\n【RiverPhone 最近手机互动】\n' + recent + '\n这些互动已经发生，应视为当前剧情事实。' : '') +
     '\n【江城大学校园论坛近期帖子】\n' + JSON.stringify(forum) +
     '\n【近期朋友圈】\n' + JSON.stringify(moments) +
-    '\n【余斯是的私人备忘录】\n' + JSON.stringify(notes);
+    '\n【余斯是的私人备忘录】\n' + JSON.stringify(notes) +
+    (socialTasks.length ? '\n【本轮小手机自动更新】\n' + socialTasks.join('\n') : '');
 }
-async function updateActivityPrompt() {
+async function updateActivityPrompt(generationType) {
   const c = ctx();
   if (!c.setExtensionPrompt) return;
-  try { await c.setExtensionPrompt(ACTIVITY_PROMPT_KEY, buildActivityPrompt(), 1, 1, false, 0); } catch {}
+  try { await c.setExtensionPrompt(ACTIVITY_PROMPT_KEY, buildActivityPrompt(generationType), 1, 1, false, 0); } catch {}
 }
 function contract() {
   return '【正文视角】用第二人称续写：旁白中的「你」始终指用户扮演的萦岁；余斯是用「余斯是」「Night」或「他」指代。' +
@@ -418,13 +505,14 @@ function contract() {
   'from 为 me 时逐字复制用户这轮写明要发送的内容，切勿替用户发言；from 为 them 时只写角色实际发出的手机文字，旁白留在正文。' +
   '如果角色这一轮还没回，就只记录用户发出的消息。如果本轮没有手机聊天，messages 留空。' +
   'Night 和线下余斯是的对话分开记录，身份未揭晓前遵守各自的知情边界。\n' +
-  '校园论坛记录江城大学公开的校园日常。剧情提到逛论坛、发帖、回帖或校园里的公开事件时，可在本轮 events.forum 写新增帖子和回帖；其他时候留空。' +
+  '校园论坛记录江城大学公开的校园日常。本轮有自动更新要求时，即使用户没提论坛也生成内容，可只写进 events.forum，不打断正文。用户在剧情里发帖或回帖时也照常记录。' +
   '新帖格式为 {"id":"同一帖子沿用的简短唯一编号","board":"校园日常","title":"帖子标题","author":"发帖昵称","text":"正文","time":"故事时间","replies":[{"author":"回帖昵称","text":"这层的话","time":"故事时间"}]}。' +
-  '旧帖盖楼只写原 id 和新增的 replies。每轮最多一条新帖、三条回帖。楼层各有口吻，内容应接得上前文。' +
+  '旧帖盖楼只写原 id 和新增的 replies。每轮最多一条新帖、三条回帖。讨论热闹的帖子可标 hot:true。楼层各有口吻，内容应接得上前文。' +
   '校园论坛是公开场合，发言者只能谈自己知道的事情；不把私聊、未公开的身份或角色心声写成公开消息。\n' +
-  '朋友圈只在剧情自然发生时更新。events.moments 的新动态格式为 {"id":"动态唯一编号","author":"发动态的人","text":"动态文案","time":"故事时间","comments":[{"author":"评论者","text":"评论","time":"故事时间"}]}。追加评论时只写原 id 和新增 comments。' +
+  '朋友圈有自动更新要求时，即使用户没提到朋友圈也生成一条新内容，可只写进数据。萦岁的微信里还有同专业同学、社团认识的朋友、选修课搭子。可以为这些人取新名字，之后保持身份和说话习惯一致。用户明确发的动态原样收录，其他时候不要替萦岁发动态。' +
+  'events.moments 的新动态格式为 {"id":"动态唯一编号","author":"发动态的人","text":"动态文案","time":"故事时间","comments":[{"author":"评论者","text":"评论","time":"故事时间"}]}。追加评论时只写原 id 和新增 comments。' +
   '余斯是的私人备忘录有实际新建或修改时，events.notes 写 {"id":"条目的唯一编号","title":"标题","text":"修改后的完整内容","time":"故事时间"}。修改旧条目沿用原 id。正文中人物只有在剧情确实看过或被告知时才知道备忘录内容。' +
-  '每轮最多一条新动态、三条评论和两条备忘录改动。没有实际变化的数组留空，不重复提交历史记录。';
+  '每轮最多一条新动态、三条评论和两条备忘录改动。校园生活可在镜头外发生；到了自动更新轮，照样记录。其他数组没有新内容则留空，不重复提交历史记录。';
 }
 async function installContract() {
   const c = ctx();
@@ -500,7 +588,7 @@ function titleBar(title) {
 function forumHtml() {
   return titleBar('校园论坛') + '<div class="rp-forum-list">' + discussionPosts('forum').map(topic =>
     '<button class="rp-forum-item" type="button" data-rp-topic="' + esc(topic.id) + '">' +
-    '<span class="rp-forum-board">' + esc(topic.board) + '</span><strong>' + esc(topic.title) + '</strong>' +
+    '<span class="rp-forum-board">' + esc(topic.board) + (topic.hot ? ' · 热帖' : '') + '</span><strong>' + esc(topic.title) + '</strong>' +
     '<span class="rp-forum-meta">' + esc(topic.author) + ' · ' + topic.replies.length + ' 条回复</span></button>'
   ).join('') + '</div>';
 }
@@ -769,6 +857,6 @@ async function activate() {
   await installContract();
   await updateActivityPrompt();
   scanExisting();
-  console.info('[RiverPhone] v0.4.0');
+  console.info('[RiverPhone] v0.5.0');
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',activate,{once:true});else queueMicrotask(activate);

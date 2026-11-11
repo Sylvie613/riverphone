@@ -1,5 +1,5 @@
 /**
- * RiverPhone v0.2.4
+ * RiverPhone v0.3.0
  * Standalone SillyTavern extension by River × Sylvie.
  * Host-page implementation: no Tavern Helper iframe is required.
  */
@@ -9,6 +9,19 @@ const ACTIVITY_PROMPT_KEY = 'riverphone_sylvie_activity';
 const CONTRACT_PROMPT_KEY = 'riverphone_sylvie_contract';
 
 const ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.6"/><path d="M10 5h4M11 18.8h2"/></svg>';
+
+const FORUM_STARTER_POST = {
+  id: 'lost-earbud-case',
+  board: '失物招领',
+  title: '图书馆东门捡到一个耳机盒',
+  author: '三号自习室',
+  time: '21:42',
+  text: '黑色的，挂着一颗银色星星。给门口保安了，来领的时候报一下挂件长什么样。',
+  replies: [
+    { author: '楼下等外卖', text: '是二楼靠窗那排的吗？我室友刚到宿舍又跑回去了。', time: '21:46' },
+    { author: '三号自习室', text: '我是在门口台阶捡的。让你室友去问下，保安十点换班。', time: '21:48' },
+  ],
+};
 
 const DEFAULT_STATE = {
   status: {
@@ -63,8 +76,9 @@ const DEFAULT_STATE = {
   activities: []
 };
 
-const ui = { popup: null, panel: null, view: 'home', contactId: null, busy: false };
+const ui = { popup: null, panel: null, view: 'home', contactId: null, topicId: null, busy: false };
 const hydratedStates = new WeakSet();
+const parsedStory = new WeakMap();
 
 function ctx() {
   try { return globalThis.SillyTavern?.getContext?.() || {}; }
@@ -165,6 +179,49 @@ function normalizeArray(v) {
   return String(v).split(/[；;|]/).map(x=>x.trim()).filter(Boolean);
 }
 
+function forumThreads() {
+  const threads = new Map([[FORUM_STARTER_POST.id, structuredClone(FORUM_STARTER_POST)]]);
+  for (const message of ctx().chat || []) {
+    if (!message || message.is_user || message.is_system) continue;
+    let cached = parsedStory.get(message);
+    if (!cached || cached.text !== message.mes) {
+      cached = { text: message.mes, events: parsePayload(message.mes)?.events?.forum };
+      parsedStory.set(message, cached);
+    }
+    if (!Array.isArray(cached.events)) continue;
+    for (const event of cached.events) {
+      if (!event || typeof event !== 'object') continue;
+      const title = compact(event.title, 100);
+      const id = compact(event.id, 100) || title;
+      if (!id) continue;
+      let thread = threads.get(id);
+      if (!thread) {
+        const text = typeof event.text === 'string' ? event.text.trim() : '';
+        if (!title || !text) continue;
+        thread = {
+          id, title, text,
+          board: compact(event.board, 24) || '校园日常',
+          author: compact(event.author, 32) || '匿名同学',
+          time: compact(event.time, 32),
+          replies: [],
+        };
+      }
+      const replies = Array.isArray(event.replies) ? event.replies : [];
+      for (const reply of replies) {
+        const text = typeof reply?.text === 'string' ? reply.text.trim() : '';
+        if (!text) continue;
+        const author = compact(reply.author, 32) || '匿名同学';
+        const time = compact(reply.time, 32);
+        if (thread.replies.some(r => r.author === author && r.text === text && r.time === time)) continue;
+        thread.replies.push({ author, text, time });
+      }
+      threads.delete(id);
+      threads.set(id, thread);
+    }
+  }
+  return [...threads.values()].reverse();
+}
+
 function explicitPhoneMessages(text) {
   const messages = [];
   const append = (name, content) => {
@@ -252,7 +309,11 @@ async function applyPayload(payload, messageId = null, messages = []) {
   }
   if (payload.memory) s.memory = { ...s.memory, ...payload.memory };
   const threadsChanged = messageId !== null && syncStoryThreads(s, messageId, messages);
-  if (!threadsChanged && !payload.status && !payload.phone && !payload.memory) return;
+  if (!threadsChanged && !payload.status && !payload.phone && !payload.memory) {
+    if (Array.isArray(payload.events?.forum)) await updateActivityPrompt();
+    if (ui.view === 'forum' || ui.view === 'topic') renderPhone();
+    return;
+  }
   if (messageId !== null && payload.status) renderInlineStatus(messageId, payload);
   await saveState();
   renderPhone();
@@ -275,9 +336,14 @@ function buildActivityPrompt() {
       core: s.memory.core,
     },
   };
+  const forum = forumThreads().slice(0, 4).map(({ id, title, replies }) => ({
+    id, title,
+    replies: replies.slice(-2).map(({ author, text }) => ({ author, text: compact(text, 100) })),
+  }));
   return '【RiverPhone 上一轮状态与记忆】\n' + JSON.stringify(previous) +
     '\n据此继续本轮剧情与手机记录，人物只能依据自己在剧情中知道的信息行动。' +
-    (recent ? '\n【RiverPhone 最近手机互动】\n' + recent + '\n这些互动已经发生，应视为当前剧情事实。' : '');
+    (recent ? '\n【RiverPhone 最近手机互动】\n' + recent + '\n这些互动已经发生，应视为当前剧情事实。' : '') +
+    '\n【江城大学校园论坛近期帖子】\n' + JSON.stringify(forum);
 }
 async function updateActivityPrompt() {
   const c = ctx();
@@ -295,7 +361,7 @@ function contract() {
   '<!--RIVERPHONE\n{"status":{"date":"故事日期与星期","event":"不超过10字","time":"时间","place":"地点","weather":"天气","state":"余斯是衣着动作","thought":"真实心理","onlineAffection":50,"offlineAffection":0},' +
   '"phone":{"phone_time":"时间","phone_date":"日期","battery":67,"unread":0,"notice":[],"message":"最近消息或无"},' +
   '"memory":{"round":"1/10","short":"短期关键事实","long":"累计长期记忆","core":"稳定关系事实"},' +
-  '"events":{"messages":[]}}\nRIVERPHONE-->\n' +
+  '"events":{"messages":[],"forum":[]}}\nRIVERPHONE-->\n' +
   '每轮根据实际剧情更新状态和余斯是未说出口的心理。Night与线下好感分别继承上一轮，只让相关互动带来变化，允许不变。' +
   '记忆只记录已经发生的关键事实。round 每轮推进一格，short 继承本周期的要点并加入本轮进展。满十轮把关键事实并入累计 long，保留旧长期记忆和 core，下轮从 1/10 开始。' +
   '如果用户在正文任何位置写「我回复 Night：『你还醒着吗？』」或「我回复余斯是：『到家了吗？』」，视为已经发出引号里的话。' +
@@ -304,7 +370,11 @@ function contract() {
   'contact_id 只能是 night（Night）、yusishi（余斯是）、room204（204宿舍群）。本轮剧情自然带出的宿舍群新消息也记录到 room204，每条写明 sender，群成员只谈他们知道的事。' +
   'from 为 me 时逐字复制用户这轮写明要发送的内容，切勿替用户发言；from 为 them 时只写角色实际发出的手机文字，旁白留在正文。' +
   '如果角色这一轮还没回，就只记录用户发出的消息。如果本轮没有手机聊天，messages 留空。' +
-  'Night 和线下余斯是的对话分开记录，身份未揭晓前遵守各自的知情边界。';
+  'Night 和线下余斯是的对话分开记录，身份未揭晓前遵守各自的知情边界。\n' +
+  '校园论坛记录江城大学公开的校园日常。剧情提到逛论坛、发帖、回帖或校园里的公开事件时，可在本轮 events.forum 写新增帖子和回帖；其他时候留空。' +
+  '新帖格式为 {"id":"同一帖子沿用的简短唯一编号","board":"校园日常","title":"帖子标题","author":"发帖昵称","text":"正文","time":"故事时间","replies":[{"author":"回帖昵称","text":"这层的话","time":"故事时间"}]}。' +
+  '旧帖盖楼只写原 id 和新增的 replies。每轮最多一条新帖、三条回帖。楼层各有口吻，内容应接得上前文。' +
+  '校园论坛是公开场合，发言者只能谈自己知道的事情；不把私聊、未公开的身份或角色心声写成公开消息。';
 }
 async function installContract() {
   const c = ctx();
@@ -339,6 +409,7 @@ async function openPhone() {
     const { Popup, POPUP_TYPE } = ctx();
     ui.view = 'home';
     ui.contactId = null;
+    ui.topicId = null;
     ui.panel = shell();
     ui.popup = new Popup(ui.panel, POPUP_TYPE.DISPLAY, '', { animation: 'none', leftAlign: true });
     ui.popup.dlg.classList.add('rp-dialog');
@@ -365,6 +436,7 @@ function homeHtml(s) {
     card('status','状态',compact(s.status.event,20)) +
     card('memory','记忆',esc(s.memory.round || '0/10')) +
     card('notice','通知',compact((s.phone.notice||[])[0] || s.phone.message || '暂无',24)) +
+    card('forum','校园论坛','江城大学') +
   '</div>';
 }
 function card(view,title,sub) {
@@ -372,6 +444,24 @@ function card(view,title,sub) {
 }
 function titleBar(title) {
   return '<div class="rp-section-title"><button class="rp-back" type="button" data-rp-action="back">‹</button><h2>' + esc(title) + '</h2></div>';
+}
+function forumHtml() {
+  return titleBar('校园论坛') + '<div class="rp-forum-list">' + forumThreads().map(topic =>
+    '<button class="rp-forum-item" type="button" data-rp-topic="' + esc(topic.id) + '">' +
+    '<span class="rp-forum-board">' + esc(topic.board) + '</span><strong>' + esc(topic.title) + '</strong>' +
+    '<span class="rp-forum-meta">' + esc(topic.author) + ' · ' + topic.replies.length + ' 条回复</span></button>'
+  ).join('') + '</div>';
+}
+function topicHtml(id) {
+  const topic = forumThreads().find(item => item.id === id);
+  if (!topic) return forumHtml();
+  const replies = topic.replies.map((reply, i) =>
+    '<li><header><b>' + esc(reply.author) + '</b><small>' + (i + 1) + ' 楼' + (reply.time ? ' · ' + esc(reply.time) : '') +
+    '</small></header><p>' + esc(reply.text) + '</p></li>'
+  ).join('');
+  return titleBar('校园论坛') + '<article class="rp-forum-topic"><span class="rp-forum-board">' + esc(topic.board) + '</span>' +
+    '<h3>' + esc(topic.title) + '</h3><div class="rp-forum-meta">' + esc(topic.author) + (topic.time ? ' · ' + esc(topic.time) : '') +
+    '</div><p>' + esc(topic.text) + '</p></article><ol class="rp-forum-replies">' + replies + '</ol>';
 }
 function messagesHtml(s) {
   return titleBar('消息') + s.contacts.map(c => {
@@ -418,6 +508,8 @@ function renderPhone() {
   else if (ui.view==='status') body.innerHTML=statusHtml(s);
   else if (ui.view==='memory') body.innerHTML=memoryHtml(s);
   else if (ui.view==='notice') body.innerHTML=noticeHtml(s);
+  else if (ui.view==='forum') body.innerHTML=forumHtml();
+  else if (ui.view==='topic') body.innerHTML=topicHtml(ui.topicId);
   else body.innerHTML=homeHtml(s);
   const thread = body.querySelector('.rp-thread');
   if (thread) requestAnimationFrame(() => { thread.scrollTop = thread.scrollHeight; });
@@ -427,8 +519,15 @@ function renderPhone() {
 function handleClick(e) {
   const action=e.target.closest('[data-rp-action]')?.dataset.rpAction;
   if (action==='close') return closePhone();
-  if (action==='home'){ui.view='home';ui.contactId=null;return renderPhone();}
-  if (action==='back'){ui.view=ui.view==='thread'?'messages':'home';ui.contactId=null;return renderPhone();}
+  if (action==='home'){ui.view='home';ui.contactId=null;ui.topicId=null;return renderPhone();}
+  if (action==='back'){
+    ui.view = ui.view === 'thread' ? 'messages' : ui.view === 'topic' ? 'forum' : 'home';
+    ui.contactId = null;
+    ui.topicId = null;
+    return renderPhone();
+  }
+  const topicId = e.target.closest('[data-rp-topic]')?.dataset.rpTopic;
+  if (topicId) { ui.view = 'topic'; ui.topicId = topicId; return renderPhone(); }
   const view=e.target.closest('[data-rp-view]')?.dataset.rpView;
   if(view){ui.view=view;return renderPhone();}
   const id=e.target.closest('[data-rp-contact]')?.dataset.rpContact;
@@ -541,6 +640,7 @@ function subscribe() {
   c.eventSource.on(e.CHARACTER_MESSAGE_RENDERED||'character_message_rendered',id=>processMessage(id));
   c.eventSource.on(e.MESSAGE_EDITED||'message_edited',id=>processMessage(id));
   c.eventSource.on(e.MESSAGE_SWIPED||'message_swiped',id=>setTimeout(()=>processMessage(id),60));
+  if (e.GENERATION_AFTER_COMMANDS) c.eventSource.on(e.GENERATION_AFTER_COMMANDS, updateActivityPrompt);
   c.eventSource.on(e.CHAT_CHANGED||'chat_id_changed',async()=>{
     void closePhone();
     syncLaunchers();
@@ -590,6 +690,6 @@ async function activate() {
   await installContract();
   await updateActivityPrompt();
   scanExisting();
-  console.info('[RiverPhone] v0.2.4');
+  console.info('[RiverPhone] v0.3.0');
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',activate,{once:true});else queueMicrotask(activate);

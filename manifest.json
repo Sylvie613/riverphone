@@ -1,9 +1,9 @@
 {
   "display_name": "RiverPhone",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "author": "River × Sylvie",
   "homePage": "https://github.com/Sylvie613/riverphone",
-  "description": "A lightweight in-world phone overlay for SillyTavern with a host-page launcher, Yu Sishi / Night dual-identity chat, status and memory.",
+  "description": "RiverPhone for SillyTavern with capture-phase mobile launcher, Yu Sishi / Night phone chat, status and memory.",
   "js": "index.js",
   "css": "style.css",
   "auto_update": true,

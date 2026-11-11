@@ -1,5 +1,5 @@
 /**
- * RiverPhone v0.1.3
+ * RiverPhone v0.1.4
  * Standalone SillyTavern extension by River × Sylvie.
  * Host-page implementation: no Tavern Helper iframe is required.
  */
@@ -67,6 +67,7 @@ const DEFAULT_STATE = {
 
 const ui = { open: false, view: 'home', contactId: null, busy: false, initialized: false };
 let fallbackState = structuredClone(DEFAULT_STATE);
+let lastLauncherActivation = 0;
 
 function ctx() {
   try { return globalThis.SillyTavern?.getContext?.() || {}; }
@@ -225,26 +226,54 @@ function shell() {
   '</div></div></section>';
 }
 
+function setPhoneOpen(nextOpen) {
+  const panel = document.getElementById('rp-phone-panel');
+  if (!panel) return;
+  ui.open = Boolean(nextOpen);
+  panel.classList.toggle('open', ui.open);
+  panel.setAttribute('aria-hidden', String(!ui.open));
+  panel.style.setProperty('opacity', ui.open ? '1' : '0', 'important');
+  panel.style.setProperty('visibility', ui.open ? 'visible' : 'hidden', 'important');
+  panel.style.setProperty('transform', ui.open ? 'none' : 'translateY(18px) scale(.98)', 'important');
+  panel.style.setProperty('pointer-events', ui.open ? 'auto' : 'none', 'important');
+  if (ui.open) renderPhone();
+}
+
+function activateLauncher(event) {
+  const now = Date.now();
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  event?.stopImmediatePropagation?.();
+  if (now - lastLauncherActivation < 500) return;
+  lastLauncherActivation = now;
+  const panel = document.getElementById('rp-phone-panel');
+  setPhoneOpen(!panel?.classList.contains('open'));
+}
+
+function launcherPoint(event) {
+  const touch = event?.touches?.[0] || event?.changedTouches?.[0];
+  return touch || event;
+}
+
+function isLauncherHit(event) {
+  if (settings().enabled === false) return false;
+  const fab = document.getElementById('rp-phone-fab');
+  const point = launcherPoint(event);
+  if (!fab || !point || !Number.isFinite(point.clientX) || !Number.isFinite(point.clientY)) return false;
+  const rect = fab.getBoundingClientRect();
+  const pad = 12;
+  return point.clientX >= rect.left - pad && point.clientX <= rect.right + pad
+    && point.clientY >= rect.top - pad && point.clientY <= rect.bottom + pad;
+}
+
+function captureLauncherPress(event) {
+  if (isLauncherHit(event)) activateLauncher(event);
+}
+
 function bindLauncher(fab) {
   if (!fab || fab.dataset.rpBound === '1') return;
   fab.dataset.rpBound = '1';
-
-  const toggle = e => {
-    e.preventDefault();
-    e.stopPropagation();
-    const panel = document.getElementById('rp-phone-panel');
-    if (!panel) return;
-    ui.open = !panel.classList.contains('open');
-    panel.classList.toggle('open', ui.open);
-    panel.setAttribute('aria-hidden', String(!ui.open));
-    if (ui.open) renderPhone();
-  };
-
-  if ('PointerEvent' in window) {
-    fab.addEventListener('pointerup', toggle, { passive: false });
-  } else {
-    fab.addEventListener('click', toggle, { passive: false });
-  }
+  fab.addEventListener('click', activateLauncher, { passive: false });
 }
 
 function ensureLauncher() {
@@ -293,19 +322,16 @@ function applySettings() {
   if (root) root.style.display = enabled ? '' : 'none';
   if (fab) fab.style.setProperty('display', enabled ? 'grid' : 'none', 'important');
 }
-function openPhone() {
-  const p = document.getElementById('rp-phone-panel');
-  if (!p) return;
-  ui.open = true;
-  p.classList.add('open');
-  p.setAttribute('aria-hidden','false');
-  renderPhone();
+function openPhone(event) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  setPhoneOpen(true);
 }
 
-function closePhone() {
-  ui.open = false;
-  const p = document.getElementById('rp-phone-panel');
-  p?.classList.remove('open'); p?.setAttribute('aria-hidden','true');
+function closePhone(event) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  setPhoneOpen(false);
 }
 
 function homeHtml(s) {
@@ -483,6 +509,8 @@ async function activate() {
     saveSettings();
   }
   initUi();
+  document.addEventListener('pointerdown', captureLauncherPress, { capture: true, passive: false });
+  if (!('PointerEvent' in window)) document.addEventListener('touchstart', captureLauncherPress, { capture: true, passive: false });
   addExtensionMenuLauncher();
   subscribe();
   await installContract();
@@ -492,6 +520,6 @@ async function activate() {
     if (!document.getElementById('rp-phone-fab')) ensureLauncher();
     if (!document.getElementById('rp-extension-menu-launch')) addExtensionMenuLauncher();
   }, 1500);
-  console.info('[RiverPhone] v0.1.3 activated on host page');
+  console.info('[RiverPhone] v0.1.4 activated with capture-phase launcher');
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',activate,{once:true});else queueMicrotask(activate);

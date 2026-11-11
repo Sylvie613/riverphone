@@ -1,11 +1,11 @@
 {
   "display_name": "RiverPhone",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "author": "River × Sylvie",
   "homePage": "https://github.com/Sylvie613/riverphone",
-  "description": "RiverPhone for SillyTavern with capture-phase mobile launcher, Yu Sishi / Night phone chat, status and memory.",
-  "js": "index.js",
-  "css": "style.css",
+  "description": "输入框旁一键打开余斯是的小手机。包含 Night 私聊、204 宿舍群、状态与记忆。",
+  "js": "index.js?v=0.2.0",
+  "css": "style.css?v=0.2.0",
   "auto_update": true,
-  "minimum_client_version": "1.10.0"
+  "minimum_client_version": "1.13.0"
 }

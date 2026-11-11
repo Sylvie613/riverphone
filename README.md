@@ -2,14 +2,16 @@
 
 RiverPhone 是一个给 SillyTavern 用的轻量“小手机”扩展。
 
-这一版把原本塞在「余斯是」角色卡里的 RiverPhone 从 Tavern Helper 角色脚本 iframe 中拆了出来，改成直接运行在 SillyTavern 主页面的第三方扩展。这样悬浮按钮和手机面板的点击事件不会再因为角色脚本 iframe 重载而失效。
+RiverPhone 作为第三方扩展运行，通过 SillyTavern 自带的弹窗显示手机界面。手机端全屏，桌面端为居中的窗口。
 
-## v0.1.0
+## 打开小手机
 
-目前包含：
+点聊天输入框左边的小手机图标。也可以从输入框旁的魔杖菜单选择 **RiverPhone**，或执行 `/riverphone`。
 
-- 常驻悬浮手机按钮
-- iPhone / 手机端适配
+打开余斯是的聊天后可发送手机消息。手机回复使用当前连接的酒馆模型。
+
+## 功能
+
 - Night 私聊
 - 余斯是线下私聊
 - 204 宿舍群聊
@@ -30,7 +32,7 @@ RiverPhone 是一个给 SillyTavern 用的轻量“小手机”扩展。
 https://github.com/Sylvie613/riverphone
 ```
 
-安装后刷新 SillyTavern。
+已安装 RiverPhone 的用户可在「管理扩展」里更新，刷新后在输入框旁打开。已导入的干净版余斯是卡可直接使用。
 
 ### 余斯是旧卡
 

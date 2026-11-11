@@ -1,11 +1,11 @@
 {
   "display_name": "RiverPhone",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": "River × Sylvie",
   "homePage": "https://github.com/Sylvie613/riverphone",
-  "description": "输入框旁一键打开余斯是的小手机。包含 Night 私聊、204 宿舍群、状态与记忆。",
-  "js": "index.js?v=0.2.0",
-  "css": "style.css?v=0.2.0",
+  "description": "余斯是的小手机。正文内回复 Night 或余斯是，同一轮同步到手机聊天。",
+  "js": "index.js?v=0.2.1",
+  "css": "style.css?v=0.2.1",
   "auto_update": true,
   "minimum_client_version": "1.13.0"
 }

@@ -1,5 +1,5 @@
 /**
- * RiverPhone v0.2.0
+ * RiverPhone v0.2.1
  * Standalone SillyTavern extension by River × Sylvie.
  * Host-page implementation: no Tavern Helper iframe is required.
  */
@@ -164,7 +164,66 @@ function normalizeArray(v) {
   return String(v).split(/[；;|]/).map(x=>x.trim()).filter(Boolean);
 }
 
-async function applyPayload(payload, messageId=null) {
+function explicitPhoneMessages(text) {
+  const messages = [];
+  for (const line of text.split(/\r?\n/)) {
+    const match = line.trim().match(/^我\s*(?:回复|回|给)\s*(Night|余斯是|204宿舍群)(?:\s*发(?:了)?(?:一条)?消息)?\s*(?:[：:]\s*(.+)|([“「『"].+))$/i);
+    if (!match) continue;
+    const content = (match[2] || match[3]).trim();
+    const quoted = content.match(/^(?:“([^”]+)”|「([^」]+)」|『([^』]+)』|"([^"]+)")/);
+    const message = (quoted ? quoted.slice(1).find(value => value !== undefined) : content).trim();
+    if (!message) continue;
+    const contact = DEFAULT_STATE.contacts.find(item => item.name.toLowerCase() === match[1].toLowerCase());
+    messages.push({ contactId: contact.id, from: 'me', text: message });
+  }
+  return messages;
+}
+
+function storyPhoneMessages(payload, userText, contacts) {
+  const result = explicitPhoneMessages(userText);
+  const explicitContacts = new Set(result.map(message => message.contactId));
+  const events = Array.isArray(payload?.events?.messages) ? payload.events.messages : [];
+  for (const event of events) {
+    const text = typeof event?.text === 'string' ? event.text.trim() : '';
+    if (!text) continue;
+    const contactId = event.contact_id || event.contactId || 'yusishi';
+    if (!contacts.some(contact => contact.id === contactId)) continue;
+    const time = typeof event.time === 'string' ? event.time : '';
+    if (event.from === 'me') {
+      if (explicitContacts.has(contactId) || !userText.includes(text)) continue;
+      result.push({ contactId, from: 'me', text, time });
+    } else {
+      const sender = typeof event.sender === 'string' ? event.sender : '';
+      result.push({ contactId, from: 'them', text, time, sender });
+    }
+  }
+  return result;
+}
+
+function syncStoryThreads(state, messageId, messages) {
+  const defaultTime = state.phone.phone_time || state.status.time;
+  let changed = false;
+  for (const contact of state.contacts) {
+    const thread = state.threads[contact.id] || [];
+    const next = messages.filter(message => message.contactId === contact.id).map(message => ({
+      from: message.from,
+      sender: message.sender || '',
+      text: message.text,
+      time: message.time || defaultTime,
+      storyMessageId: messageId,
+    }));
+    const previous = thread.filter(message => message.storyMessageId === messageId);
+    if (JSON.stringify(previous) === JSON.stringify(next)) continue;
+    const index = thread.findIndex(message => message.storyMessageId === messageId);
+    const merged = thread.filter(message => message.storyMessageId !== messageId);
+    merged.splice(index < 0 ? merged.length : index, 0, ...next);
+    state.threads[contact.id] = merged;
+    changed = true;
+  }
+  return changed;
+}
+
+async function applyPayload(payload, messageId = null, messages = []) {
   if (!isYuSishiChat() || !payload || typeof payload !== 'object') return;
   const s = state();
   if (payload.status) s.status = { ...s.status, ...payload.status };
@@ -174,14 +233,8 @@ async function applyPayload(payload, messageId=null) {
     s.phone = { ...s.phone, ...p };
   }
   if (payload.memory) s.memory = { ...s.memory, ...payload.memory };
-  const messages = Array.isArray(payload.events?.messages) ? payload.events.messages : [];
-  for (const m of messages) {
-    if (!m || typeof m.text !== 'string' || !m.text.trim()) continue;
-    const id = m.contact_id || m.contactId || 'yusishi';
-    if (!s.contacts.some(contact => contact.id === id)) continue;
-    s.threads[id] ||= [];
-    s.threads[id].push({ from:'them', sender:m.sender || '', text:String(m.text||''), time:m.time || nowTime() });
-  }
+  const threadsChanged = messageId !== null && syncStoryThreads(s, messageId, messages);
+  if (!threadsChanged && !payload.status && !payload.phone && !payload.memory) return;
   if (messageId !== null && payload.status) renderInlineStatus(messageId, payload);
   await saveState();
   renderPhone();
@@ -204,7 +257,13 @@ function contract() {
   '"phone":{"phone_time":"时间","phone_date":"日期","battery":67,"unread":0,"notice":[],"message":"最近消息或无"},' +
   '"memory":{"round":"1/10","short":"短期关键事实","long":"累计长期记忆","core":"稳定关系事实"},' +
   '"events":{"messages":[]}}\nRIVERPHONE-->\n' +
-  '状态与记忆继承上一轮；手机事件只在剧情自然发生时新增。';
+  '状态与记忆继承上一轮。手机事件只记录这轮新发生的聊天。' +
+  '如果用户在酒馆正文里写「我回复 Night：『你还醒着吗？』」或「我回复余斯是：『到家了吗？』」，视为用户已经用手机发出了引号里的话。' +
+  '在这同一轮正文生成里接着写角色收到消息后的反应和手机回复，并在 events.messages 按发生顺序记录双方实际发出的消息。' +
+  '每条形如 {"contact_id":"night","from":"me","text":"你还醒着吗？","time":"23:58"} 或 {"contact_id":"night","from":"them","text":"嗯，还醒着。","time":"23:59"}。' +
+  'contact_id 只能是 night（Night）、yusishi（余斯是）、room204（204宿舍群）。群聊中角色消息可用 sender 标明发言者。' +
+  'from 为 me 时逐字复制用户这轮写明要发送的内容，切勿替用户发言；from 为 them 时只写角色实际发出的手机文字，旁白留在正文。' +
+  '如果角色这一轮还没回，就只记录用户发出的消息。如果本轮没有手机聊天，messages 留空。';
 }
 async function installContract() {
   const c = ctx();
@@ -394,8 +453,16 @@ function renderInlineStatus(id,payload) {
   (mes.querySelector('.mes_block')||mes).append(d);
 }
 async function processMessage(id) {
-  const m=ctx().chat?.[Number(id)]; if(!m||m.is_user)return;
-  const p=parsePayload(m.mes); if(p) await applyPayload(p,Number(id));
+  if (!isYuSishiChat()) return;
+  const index = Number(id);
+  const chat = ctx().chat;
+  const reply = chat?.[index];
+  if (!reply || reply.is_user || reply.is_system) return;
+  const previous = chat[index - 1];
+  const userText = previous?.is_user ? String(previous.mes || '') : '';
+  const payload = parsePayload(reply.mes);
+  const messages = storyPhoneMessages(payload, userText, state().contacts);
+  await applyPayload(payload || {}, index, messages);
 }
 function scanExisting() {
   if (!isYuSishiChat()) return;
@@ -467,6 +534,6 @@ async function activate() {
   await installContract();
   await updateActivityPrompt();
   scanExisting();
-  console.info('[RiverPhone] v0.2.0');
+  console.info('[RiverPhone] v0.2.1');
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',activate,{once:true});else queueMicrotask(activate);

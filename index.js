@@ -1,5 +1,5 @@
 /**
- * RiverPhone v0.2.2
+ * RiverPhone v0.2.3
  * Standalone SillyTavern extension by River × Sylvie.
  * Host-page implementation: no Tavern Helper iframe is required.
  */
@@ -107,14 +107,15 @@ function compact(v, n=120) {
 function nowTime() {
   return state().phone.phone_time || state().status.time || new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
 }
-function activeCharacter() {
-  const c = ctx();
+function activeCharacter(c = ctx()) {
   return c.characters?.[c.characterId] || c.characters?.[c.character_id] || {};
 }
 function isYuSishiChat() {
-  const ch = activeCharacter();
-  const hay = [ch.name, ch.description, ch.personality, ch.creator_notes].filter(Boolean).join('\n');
-  return /余斯是|Yu\s*Sishi|Night/i.test(hay);
+  const c = ctx();
+  if (c.groupId || !(c.getCurrentChatId?.() ?? c.chatId)) return false;
+  const character = activeCharacter(c);
+  const name = String(character.name || character.data?.name || '').replace(/\s+/g, '').toLowerCase();
+  return name === '余斯是' || name === 'yusishi' || character.data?.extensions?.[MODULE_KEY]?.profile === 'yusishi';
 }
 
 function parseJsonLoose(raw) {
@@ -330,7 +331,7 @@ function shell() {
 }
 
 async function openPhone() {
-  if (ui.popup) return;
+  if (ui.popup || !isYuSishiChat()) return;
   try {
     const { Popup, POPUP_TYPE } = ctx();
     ui.view = 'home';
@@ -377,7 +378,7 @@ function messagesHtml(s) {
 }
 function threadHtml(s,id) {
   const c = s.contacts.find(x=>x.id===id) || s.contacts[0], t=s.threads[id] || [];
-  const canSend = isYuSishiChat() && Boolean(ctx().getCurrentChatId?.());
+  const canSend = isYuSishiChat();
   const disabled = canSend && !ui.busy ? '' : ' disabled';
   return titleBar(c.name) + '<div class="rp-thread">' + t.map(m => '<div class="rp-msg ' + (m.from==='me'?'me':m.from==='system'?'system':'them') + '">' + (m.sender?'<b>'+esc(m.sender)+'</b><br>':'') + esc(m.text) + '<small>' + esc(m.time||'') + '</small></div>').join('') + '</div>' +
   '<form class="rp-compose" data-rp-form="' + esc(c.id) + '"><input id="rp-message-input" aria-label="手机消息" autocomplete="off" placeholder="' +
@@ -407,7 +408,7 @@ function renderPhone() {
   const s = state();
   const body = ui.panel.querySelector('#rp-phone-body');
   ui.panel.querySelector('#rp-os-time').textContent = s.phone.phone_time || s.status.time || '';
-  ui.panel.querySelector('.rp-word').textContent = isYuSishiChat() ? 'RIVERPHONE' : 'RIVERPHONE · 预览';
+  ui.panel.querySelector('.rp-word').textContent = 'RIVERPHONE';
   ui.panel.querySelector('#rp-os-battery').textContent = Math.max(0,Math.min(100,Number(s.phone.battery||0)))+'%';
   if (ui.view==='messages') body.innerHTML=messagesHtml(s);
   else if (ui.view==='thread') body.innerHTML=threadHtml(s,ui.contactId);
@@ -460,7 +461,7 @@ async function handleSubmit(e) {
   e.preventDefault();
   const input=form.querySelector('input'), text=input.value.trim();
   const metadata = ctx().chatMetadata;
-  if (!text || ui.busy || !metadata || !isYuSishiChat() || !ctx().getCurrentChatId?.()) return;
+  if (!text || ui.busy || !metadata || !isYuSishiChat()) return;
   const id=form.dataset.rpForm,s=state(),c=s.contacts.find(x=>x.id===id)||s.contacts[0];
   s.threads[id]||=[]; s.threads[id].push({from:'me',text,time:nowTime()});
   input.value=''; ui.busy=true;
@@ -539,6 +540,7 @@ function subscribe() {
   c.eventSource.on(e.MESSAGE_SWIPED||'message_swiped',id=>setTimeout(()=>processMessage(id),60));
   c.eventSource.on(e.CHAT_CHANGED||'chat_id_changed',async()=>{
     void closePhone();
+    syncLaunchers();
     await installContract();
     await updateActivityPrompt();
     scanExisting();
@@ -559,16 +561,25 @@ function addComposerLauncher() {
   host.append(button);
 }
 
-async function activate() {
-  if (document.getElementById('rp-composer-launch')) return;
+function syncLaunchers() {
+  if (!isYuSishiChat()) {
+    document.getElementById('rp-composer-launch')?.remove();
+    document.getElementById('rp-extension-menu-launch')?.remove();
+    return;
+  }
   addComposerLauncher();
   addExtensionMenuLauncher();
+}
+
+async function activate() {
+  syncLaunchers();
   const { SlashCommand, SlashCommandParser } = ctx();
   SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     name: 'riverphone',
-    helpString: '打开 RiverPhone 小手机。',
+    helpString: '在余斯是的聊天中打开 RiverPhone 小手机。',
     callback: () => {
-      void openPhone();
+      if (isYuSishiChat()) void openPhone();
+      else globalThis.toastr?.info('请先打开余斯是的聊天。', 'RiverPhone');
       return '';
     },
   }));
@@ -576,6 +587,6 @@ async function activate() {
   await installContract();
   await updateActivityPrompt();
   scanExisting();
-  console.info('[RiverPhone] v0.2.2');
+  console.info('[RiverPhone] v0.2.3');
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',activate,{once:true});else queueMicrotask(activate);

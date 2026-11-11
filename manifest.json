@@ -1,11 +1,11 @@
 {
   "display_name": "RiverPhone",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "author": "River × Sylvie",
   "homePage": "https://github.com/Sylvie613/riverphone",
   "description": "一轮正文同步余斯是的小手机聊天、群消息、状态、好感与记忆。",
-  "js": "index.js?v=0.2.2",
-  "css": "style.css?v=0.2.2",
+  "js": "index.js?v=0.2.3",
+  "css": "style.css?v=0.2.3",
   "auto_update": true,
   "minimum_client_version": "1.13.0"
 }

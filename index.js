@@ -1,5 +1,5 @@
 /**
- * RiverPhone v0.2.3
+ * RiverPhone v0.2.4
  * Standalone SillyTavern extension by River × Sylvie.
  * Host-page implementation: no Tavern Helper iframe is required.
  */
@@ -285,7 +285,10 @@ async function updateActivityPrompt() {
   try { await c.setExtensionPrompt(ACTIVITY_PROMPT_KEY, buildActivityPrompt(), 1, 1, false, 0); } catch {}
 }
 function contract() {
-  return '正常续写酒馆正文，接住用户这一条里的动作、当面说的话和手机互动。用户可以把这些内容写在同一段里。' +
+  return '【正文视角】用第二人称续写：旁白中的「你」始终指用户扮演的萦岁；余斯是用「余斯是」「Night」或「他」指代。' +
+  '即使前文出现过余斯是第一人称旁白，本轮也用这个视角接续已发生的剧情。' +
+  '角色台词和手机消息保留自然人称，可以说「我」。例如：你低头看见屏幕亮了，余斯是发来一句：「我到楼下了。」\n' +
+  '正常续写酒馆正文，接住用户这一条里的动作、当面说的话和手机互动。用户可以把这些内容写在同一段里。' +
   '例如「我收起耳机，跟室友说了声晚安，随后我回复 Night：『你还醒着吗？』。」' +
   '正文应写清角色怎么接话、怎么行动。角色发来手机回复时，在正文中写出实际回信文字，再将同一句抄进手机记录。' +
   '完整正文之后追加以下不可见HTML注释，不要代码围栏：\n' +
@@ -587,6 +590,6 @@ async function activate() {
   await installContract();
   await updateActivityPrompt();
   scanExisting();
-  console.info('[RiverPhone] v0.2.3');
+  console.info('[RiverPhone] v0.2.4');
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',activate,{once:true});else queueMicrotask(activate);

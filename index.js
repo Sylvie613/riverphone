@@ -1,5 +1,5 @@
 /**
- * RiverPhone v0.2.1
+ * RiverPhone v0.2.2
  * Standalone SillyTavern extension by River × Sylvie.
  * Host-page implementation: no Tavern Helper iframe is required.
  */
@@ -166,15 +166,17 @@ function normalizeArray(v) {
 
 function explicitPhoneMessages(text) {
   const messages = [];
+  const append = (name, content) => {
+    const contact = DEFAULT_STATE.contacts.find(item => item.name.toLowerCase() === name.toLowerCase());
+    const message = content.trim();
+    if (message) messages.push({ contactId: contact.id, from: 'me', text: message });
+  };
   for (const line of text.split(/\r?\n/)) {
-    const match = line.trim().match(/^我\s*(?:回复|回|给)\s*(Night|余斯是|204宿舍群)(?:\s*发(?:了)?(?:一条)?消息)?\s*(?:[：:]\s*(.+)|([“「『"].+))$/i);
-    if (!match) continue;
-    const content = (match[2] || match[3]).trim();
-    const quoted = content.match(/^(?:“([^”]+)”|「([^」]+)」|『([^』]+)』|"([^"]+)")/);
-    const message = (quoted ? quoted.slice(1).find(value => value !== undefined) : content).trim();
-    if (!message) continue;
-    const contact = DEFAULT_STATE.contacts.find(item => item.name.toLowerCase() === match[1].toLowerCase());
-    messages.push({ contactId: contact.id, from: 'me', text: message });
+    const quoted = [...line.matchAll(/我\s*(?:回复|回|给)\s*(Night|余斯是|204宿舍群)(?:\s*发(?:了)?(?:一?条)?消息)?\s*(?:说\s*)?[：:]?\s*(?:“([^”]+)”|「([^」]+)」|『([^』]+)』|"([^"]+)")/gi)];
+    for (const match of quoted) append(match[1], match.slice(2).find(value => value !== undefined));
+    if (quoted.length) continue;
+    const plain = line.trim().match(/^我\s*(?:回复|回|给)\s*(Night|余斯是|204宿舍群)(?:\s*发(?:了)?(?:一?条)?消息)?\s*[：:]\s*(.+)$/i);
+    if (plain) append(plain[1], plain[2]);
   }
   return messages;
 }
@@ -226,7 +228,22 @@ function syncStoryThreads(state, messageId, messages) {
 async function applyPayload(payload, messageId = null, messages = []) {
   if (!isYuSishiChat() || !payload || typeof payload !== 'object') return;
   const s = state();
-  if (payload.status) s.status = { ...s.status, ...payload.status };
+  if (payload.status) {
+    const next = { ...s.status, ...payload.status };
+    if (messageId !== null) {
+      const baseline = s.affectionTurn?.messageId === messageId ? s.affectionTurn : {
+        messageId,
+        online: Number(s.status.onlineAffection),
+        offline: Number(s.status.offlineAffection),
+      };
+      s.affectionTurn = baseline;
+      const onlineDelta = Number(next.onlineAffection) - baseline.online;
+      const offlineDelta = Number(next.offlineAffection) - baseline.offline;
+      next.onlineDelta = Number.isFinite(onlineDelta) ? onlineDelta : 0;
+      next.offlineDelta = Number.isFinite(offlineDelta) ? offlineDelta : 0;
+    }
+    s.status = next;
+  }
   if (payload.phone) {
     const p = { ...payload.phone };
     if (p.notice !== undefined) p.notice = normalizeArray(p.notice);
@@ -244,7 +261,22 @@ function buildActivityPrompt() {
   if (!isYuSishiChat()) return '';
   const s = state();
   const recent = (s.activities || []).slice(-8).join('\n');
-  return recent ? '【RiverPhone最近手机互动】\n' + recent + '\n这些互动已经发生，应视为当前剧情事实。' : '';
+  const previous = {
+    time: s.status.time,
+    place: s.status.place,
+    thought: compact(s.status.thought, 160),
+    onlineAffection: s.status.onlineAffection,
+    offlineAffection: s.status.offlineAffection,
+    memory: {
+      round: s.memory.round,
+      short: s.memory.short,
+      long: s.memory.long,
+      core: s.memory.core,
+    },
+  };
+  return '【RiverPhone 上一轮状态与记忆】\n' + JSON.stringify(previous) +
+    '\n据此继续本轮剧情与手机记录，人物只能依据自己在剧情中知道的信息行动。' +
+    (recent ? '\n【RiverPhone 最近手机互动】\n' + recent + '\n这些互动已经发生，应视为当前剧情事实。' : '');
 }
 async function updateActivityPrompt() {
   const c = ctx();
@@ -252,18 +284,23 @@ async function updateActivityPrompt() {
   try { await c.setExtensionPrompt(ACTIVITY_PROMPT_KEY, buildActivityPrompt(), 1, 1, false, 0); } catch {}
 }
 function contract() {
-  return '每次完成正文后，在回复末尾追加不可见HTML注释，不要代码围栏：\n' +
+  return '正常续写酒馆正文，接住用户这一条里的动作、当面说的话和手机互动。用户可以把这些内容写在同一段里。' +
+  '例如「我收起耳机，跟室友说了声晚安，随后我回复 Night：『你还醒着吗？』。」' +
+  '正文应写清角色怎么接话、怎么行动。角色发来手机回复时，在正文中写出实际回信文字，再将同一句抄进手机记录。' +
+  '完整正文之后追加以下不可见HTML注释，不要代码围栏：\n' +
   '<!--RIVERPHONE\n{"status":{"date":"故事日期与星期","event":"不超过10字","time":"时间","place":"地点","weather":"天气","state":"余斯是衣着动作","thought":"真实心理","onlineAffection":50,"offlineAffection":0},' +
   '"phone":{"phone_time":"时间","phone_date":"日期","battery":67,"unread":0,"notice":[],"message":"最近消息或无"},' +
   '"memory":{"round":"1/10","short":"短期关键事实","long":"累计长期记忆","core":"稳定关系事实"},' +
   '"events":{"messages":[]}}\nRIVERPHONE-->\n' +
-  '状态与记忆继承上一轮。手机事件只记录这轮新发生的聊天。' +
-  '如果用户在酒馆正文里写「我回复 Night：『你还醒着吗？』」或「我回复余斯是：『到家了吗？』」，视为用户已经用手机发出了引号里的话。' +
-  '在这同一轮正文生成里接着写角色收到消息后的反应和手机回复，并在 events.messages 按发生顺序记录双方实际发出的消息。' +
+  '每轮根据实际剧情更新状态和余斯是未说出口的心理。Night与线下好感分别继承上一轮，只让相关互动带来变化，允许不变。' +
+  '记忆只记录已经发生的关键事实。round 每轮推进一格，short 继承本周期的要点并加入本轮进展。满十轮把关键事实并入累计 long，保留旧长期记忆和 core，下轮从 1/10 开始。' +
+  '如果用户在正文任何位置写「我回复 Night：『你还醒着吗？』」或「我回复余斯是：『到家了吗？』」，视为已经发出引号里的话。' +
+  '在 events.messages 按发生顺序记录双方实际发出的消息。' +
   '每条形如 {"contact_id":"night","from":"me","text":"你还醒着吗？","time":"23:58"} 或 {"contact_id":"night","from":"them","text":"嗯，还醒着。","time":"23:59"}。' +
-  'contact_id 只能是 night（Night）、yusishi（余斯是）、room204（204宿舍群）。群聊中角色消息可用 sender 标明发言者。' +
+  'contact_id 只能是 night（Night）、yusishi（余斯是）、room204（204宿舍群）。本轮剧情自然带出的宿舍群新消息也记录到 room204，每条写明 sender，群成员只谈他们知道的事。' +
   'from 为 me 时逐字复制用户这轮写明要发送的内容，切勿替用户发言；from 为 them 时只写角色实际发出的手机文字，旁白留在正文。' +
-  '如果角色这一轮还没回，就只记录用户发出的消息。如果本轮没有手机聊天，messages 留空。';
+  '如果角色这一轮还没回，就只记录用户发出的消息。如果本轮没有手机聊天，messages 留空。' +
+  'Night 和线下余斯是的对话分开记录，身份未揭晓前遵守各自的知情边界。';
 }
 async function installContract() {
   const c = ctx();
@@ -348,12 +385,17 @@ function threadHtml(s,id) {
     '><button type="submit"' + disabled + '>发送</button></form>';
 }
 function statusHtml(s) {
-  return titleBar('状态') + '<div class="rp-pills"><div class="rp-pill"><small>线下</small><b>'+esc(s.status.offlineAffection)+'</b></div><div class="rp-pill"><small>Night</small><b>'+esc(s.status.onlineAffection)+'</b></div><div class="rp-pill"><small>未读</small><b>'+esc(s.phone.unread||0)+'</b></div></div>' +
+  const affection = (name, score, delta) => '<div class="rp-pill"><small>' + name + ' 好感</small><b>' + esc(score) +
+    '</b><small>本轮 ' + (delta > 0 ? '+' : '') + esc(delta || 0) + '</small></div>';
+  return titleBar('状态') + '<div class="rp-pills">' +
+  affection('余斯是', s.status.offlineAffection, s.status.offlineDelta) +
+  affection('Night', s.status.onlineAffection, s.status.onlineDelta) +
+  '<div class="rp-pill"><small>未读</small><b>'+esc(s.phone.unread||0)+'</b></div></div>' +
   stat('事件',s.status.event)+stat('日期与天气',s.status.date+' · '+s.status.weather)+stat('时间与地点',s.status.time+' · '+s.status.place)+
-  stat('现在',s.status.state)+stat('INNER NOTE',s.status.thought);
+  stat('现在',s.status.state)+stat('他的想法',s.status.thought);
 }
 function memoryHtml(s) {
-  return titleBar('记忆') + stat('ROUND',s.memory.round)+stat('SHORT',s.memory.short)+stat('LONG',s.memory.long)+stat('CORE',s.memory.core);
+  return titleBar('记忆') + stat('轮次',s.memory.round)+stat('本周期',s.memory.short)+stat('长期记忆',s.memory.long)+stat('核心记忆',s.memory.core);
 }
 function noticeHtml(s) {
   return titleBar('通知') + (normalizeArray(s.phone.notice).map(x=>stat('NOTICE',x)).join('') || stat('NOTICE','暂无新通知'));
@@ -534,6 +576,6 @@ async function activate() {
   await installContract();
   await updateActivityPrompt();
   scanExisting();
-  console.info('[RiverPhone] v0.2.1');
+  console.info('[RiverPhone] v0.2.2');
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',activate,{once:true});else queueMicrotask(activate);

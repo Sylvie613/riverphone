@@ -11,24 +11,24 @@
 #rp-composer-launch:hover,#rp-composer-launch:focus-visible{background:var(--SmartThemeBorderColor,rgba(140,157,171,.2))}
 #rp-composer-launch svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 dialog.rp-dialog.popup{
-  box-sizing:border-box;width:min(390px,calc(100vw - 24px));height:min(680px,calc(100dvh - 24px));
-  margin:auto;max-width:none;max-height:none;min-height:0;padding:0;border:0;border-radius:34px;
-  background:#0c1116;box-shadow:var(--rp-shadow);overflow:hidden
+  box-sizing:border-box;width:min(318px,calc(100vw - 64px));height:min(558px,calc(100dvh - 184px));
+  margin:auto;max-width:none;max-height:none;min-height:0;padding:0;border:0;border-radius:28px;
+  background:#0c1116;box-shadow:0 24px 72px rgba(0,0,0,.62);overflow:hidden
 }
 dialog.rp-dialog.popup:not([open]){display:none}
-dialog.rp-dialog.popup[open]::backdrop{background:rgba(3,8,13,.66);backdrop-filter:none;-webkit-backdrop-filter:none}
+dialog.rp-dialog.popup[open]::backdrop{background:rgba(3,8,13,.28);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
 dialog.rp-dialog.popup .popup-body,dialog.rp-dialog.popup .popup-content{
   box-sizing:border-box;width:100%;height:100%;max-height:none;min-height:0;margin:0;padding:0
 }
 .rp-dialog.popup .popup-controls,.rp-dialog.popup .popup-button-close{display:none!important}
 #rp-phone-panel,#rp-phone-panel *{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif}
 .rp-shell{
-  width:100%;height:100%;border-radius:34px;padding:7px;overflow:hidden;position:relative;
-  background:linear-gradient(150deg,#39444d 0%,#11171d 14%,#070a0d 76%,#303a43 100%);
-  border:1px solid rgba(226,236,244,.24);box-shadow:var(--rp-shadow)
+  width:100%;height:100%;border-radius:28px;padding:5px;overflow:hidden;position:relative;
+  background:linear-gradient(150deg,#485560 0%,#12171d 15%,#07090c 78%,#36414a 100%);
+  border:1px solid rgba(210,226,238,.26);box-shadow:var(--rp-shadow)
 }
 .rp-screen{
-  height:100%;border-radius:27px;overflow:hidden;background:
+  height:100%;border-radius:23px;overflow:hidden;background:
     radial-gradient(circle at 80% 0%,rgba(130,165,190,.12),transparent 30%),
     linear-gradient(180deg,#141a20,#0b1015);color:var(--rp-text);display:flex;flex-direction:column
 }
@@ -68,18 +68,51 @@ dialog.rp-dialog.popup .popup-body,dialog.rp-dialog.popup .popup-content{
 }
 .rp-contact-main{min-width:0;flex:1}.rp-contact-main b{font-size:14px}.rp-contact-main p{margin:4px 0 0;color:#8ea0ac;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rp-contact em{font-style:normal;font-size:10px;color:#74838e}
-.rp-body:has(.rp-thread){display:flex;flex-direction:column;overflow:hidden}
-.rp-thread{display:flex;flex:1;min-height:0;flex-direction:column;gap:8px;padding-bottom:10px;overflow:auto;overscroll-behavior:contain}
-.rp-msg{max-width:82%;padding:9px 11px;border-radius:14px;font-size:13px;line-height:1.45}
-.rp-msg.them{align-self:flex-start;background:#1d2730;border:1px solid rgba(255,255,255,.06)}
-.rp-msg.me{align-self:flex-end;background:#9eb8ca;color:#0c1115}
-.rp-msg.system{align-self:center;background:transparent;color:#81919c;font-size:11px}
-.rp-msg small{display:block;margin-top:4px;font-size:9px;opacity:.6}
-.rp-compose{display:flex;flex:none;gap:7px;margin-top:12px;padding-top:8px}
-.rp-compose input{
-  flex:1;min-width:0;height:44px;border-radius:12px;border:1px solid var(--rp-line);background:#111820;color:#edf3f7;padding:0 11px;font-size:16px
+.rp-body:has(.rp-thread){display:flex;flex-direction:column;overflow:hidden;padding:0}
+.rp-thread{
+  display:flex;flex:1;min-height:0;flex-direction:column;gap:10px;padding:15px 13px 12px;overflow:auto;overscroll-behavior:contain;
+  background:
+    linear-gradient(rgba(74,144,226,.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(74,144,226,.018) 1px,transparent 1px),
+    radial-gradient(circle at 12% 0%,rgba(74,144,226,.10),transparent 36%),#0d1116;
+  background-size:22px 22px,22px 22px,auto,auto
 }
-.rp-compose button{width:56px;border:0;border-radius:12px;background:#a7bfd2;color:#0c1115;font-weight:600}
+.rp-msg{
+  position:relative;max-width:84%;padding:9px 11px;border:1px solid rgba(157,188,212,.17);
+  border-left:2px solid rgba(74,144,226,.72);border-radius:5px 15px 15px 15px;
+  background:linear-gradient(145deg,rgba(28,36,45,.97),rgba(17,23,30,.98));color:#e1e8ee;
+  box-shadow:0 8px 18px rgba(0,0,0,.22),inset 0 1px rgba(255,255,255,.035);
+  font-size:11px;line-height:1.65;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)
+}
+.rp-msg::after{
+  content:"";position:absolute;left:-5px;top:10px;width:8px;height:8px;
+  border-left:1px solid rgba(157,188,212,.16);border-bottom:1px solid rgba(157,188,212,.16);
+  background:#1a222b;transform:rotate(45deg)
+}
+.rp-msg.them{align-self:flex-start}
+.rp-msg.me{
+  align-self:flex-end;border:1px solid rgba(144,183,211,.28);border-right:2px solid rgba(154,190,216,.86);
+  border-radius:15px 5px 15px 15px;background:linear-gradient(145deg,rgba(43,64,80,.98),rgba(28,44,57,.98));
+  color:#f0f5f8;box-shadow:0 8px 20px rgba(3,12,19,.30),inset 0 1px rgba(255,255,255,.06)
+}
+.rp-msg.me::after{
+  left:auto;right:-5px;border:0;border-top:1px solid rgba(144,183,211,.25);
+  border-right:1px solid rgba(144,183,211,.25);background:#263a49
+}
+.rp-msg.system{align-self:center;padding:2px 8px;border:0;background:transparent;color:#81919c;font-size:10px;box-shadow:none}
+.rp-msg.system::after{display:none}
+.rp-msg b{font-size:9px;letter-spacing:.06em;color:#a7bfd2}
+.rp-msg small{display:block;margin-top:4px;color:#6f8393;font-size:8px;letter-spacing:.06em;opacity:1}
+.rp-msg.me small{text-align:right;color:#8ba3b5}
+.rp-compose{
+  display:flex;flex:none;gap:7px;margin:0;padding:8px;background:linear-gradient(180deg,#11171d,#0c1014);
+  border-top:1px solid rgba(157,188,212,.10);box-shadow:0 -10px 24px rgba(0,0,0,.18)
+}
+.rp-compose input{
+  flex:1;min-width:0;height:38px;border-radius:13px;border:1px solid rgba(157,188,212,.15);
+  background:rgba(24,32,40,.94);color:#edf3f7;padding:0 11px;font-size:16px
+}
+.rp-compose button{width:48px;border:0;border-radius:13px;background:#a7bfd2;color:#0c1115;font-weight:600}
 .rp-compose :disabled{opacity:.55}
 .rp-forum-list{display:grid;gap:8px}
 .rp-forum-item,.rp-forum-topic{
@@ -133,10 +166,18 @@ dialog.rp-dialog.popup .popup-body,dialog.rp-dialog.popup .popup-content{
 .rp-inline-grid div{padding:9px;border:1px solid var(--rp-line);border-radius:12px}.rp-inline-grid small{display:block;color:#748692;font-size:9px}.rp-inline-grid b{font-size:17px;font-weight:500}
 @media(max-width:700px){
   #rp-composer-launch{width:44px}
-  dialog.rp-dialog.popup{width:100vw;height:100dvh;margin:0;inset:0;border-radius:0}
-  #rp-phone-panel{padding:0;border:0;border-radius:0}
-  #rp-phone-panel .rp-screen{border-radius:0}
-  .rp-top{height:calc(48px + env(safe-area-inset-top));padding-top:env(safe-area-inset-top)}
-  .rp-nav{height:calc(56px + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom)}
-  .rp-hero h1{font-size:38px}
+  dialog.rp-dialog.popup{
+    width:min(306px,calc(100vw - 66px));height:min(530px,calc(100dvh - 192px));
+    margin:auto;border-radius:27px
+  }
+  #rp-phone-panel{padding:5px;border:1px solid rgba(210,226,238,.26);border-radius:27px}
+  #rp-phone-panel .rp-screen{border-radius:22px}
+  .rp-top{height:42px;padding:7px 13px 0}
+  .rp-nav{height:52px;padding-bottom:0}
+  .rp-body{padding:15px 13px 12px}
+  .rp-body:has(.rp-thread){padding:0}
+  .rp-hero h1{font-size:34px}
+}
+@media(max-height:650px){
+  dialog.rp-dialog.popup{height:min(470px,calc(100dvh - 136px))}
 }

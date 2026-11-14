@@ -1,5 +1,5 @@
 /**
- * RiverPhone v0.5.0
+ * RiverPhone v0.6.0
  * Standalone SillyTavern extension by River × Sylvie.
  * Host-page implementation: no Tavern Helper iframe is required.
  */
@@ -857,6 +857,6 @@ async function activate() {
   await installContract();
   await updateActivityPrompt();
   scanExisting();
-  console.info('[RiverPhone] v0.5.0');
+  console.info('[RiverPhone] v0.6.0');
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',activate,{once:true});else queueMicrotask(activate);

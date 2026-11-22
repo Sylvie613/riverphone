@@ -1,11 +1,11 @@
 {
-  "display_name": "RiverPhone",
-  "version": "0.6.0",
-  "author": "River × Sylvie",
+  "display_name": "MÉMÉ OS",
+  "version": "0.7.0",
+  "author": "Sylvie & River",
   "homePage": "https://github.com/Sylvie613/riverphone",
-  "description": "余斯是的悬浮小手机：紧凑窗口、黑蓝玻璃气泡，并随正文同步聊天、校园论坛、朋友圈、备忘录与记忆。",
-  "js": "index.js?v=0.6.0",
-  "css": "style.css?v=0.6.0",
+  "description": "MÉMÉ OS：互动成长系统。沿用已验证可运行的旧扩展安装槽。",
+  "js": "index.js?v=0.7.0",
+  "css": "style.css?v=0.7.0",
   "auto_update": true,
   "minimum_client_version": "1.13.0"
 }
